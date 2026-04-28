@@ -29,9 +29,9 @@ use openshell_core::proto::{
     GetGatewayConfigRequest, GetProviderRequest, GetSandboxConfigRequest, GetSandboxLogsRequest,
     GetSandboxPolicyStatusRequest, GetSandboxRequest, HealthRequest, ListProviderProfilesRequest,
     ListProvidersRequest, ListSandboxPoliciesRequest, ListSandboxesRequest, PolicySource,
-    PolicyStatus, Provider, ProviderProfile, RejectDraftChunkRequest, Sandbox, SandboxPhase,
-    SandboxPolicy, SandboxSpec, SandboxTemplate, SetClusterInferenceRequest, SettingScope,
-    SettingValue, UpdateConfigRequest, UpdateProviderRequest, WatchSandboxRequest,
+    PolicyStatus, Provider, ProviderProfile, RejectDraftChunkRequest, Sandbox, SandboxFeatures,
+    SandboxPhase, SandboxPolicy, SandboxSpec, SandboxTemplate, SetClusterInferenceRequest,
+    SettingScope, SettingValue, UpdateConfigRequest, UpdateProviderRequest, WatchSandboxRequest,
     exec_sandbox_event, setting_value,
 };
 use openshell_core::settings::{self, SettingValueKind};
@@ -1940,6 +1940,7 @@ pub async fn sandbox_create_with_bootstrap(
     tty_override: Option<bool>,
     bootstrap_override: Option<bool>,
     auto_providers_override: Option<bool>,
+    provider_profile_policy: bool,
 ) -> Result<()> {
     if !crate::bootstrap::confirm_bootstrap(bootstrap_override)? {
         return Err(miette::miette!(
@@ -1976,6 +1977,7 @@ pub async fn sandbox_create_with_bootstrap(
         tty_override,
         Some(false),
         auto_providers_override,
+        provider_profile_policy,
         &HashMap::new(),
         &tls,
     ))
@@ -2033,6 +2035,7 @@ pub async fn sandbox_create(
     tty_override: Option<bool>,
     bootstrap_override: Option<bool>,
     auto_providers_override: Option<bool>,
+    provider_profile_policy: bool,
     labels: &HashMap<String, String>,
     tls: &TlsOptions,
 ) -> Result<()> {
@@ -2138,6 +2141,9 @@ pub async fn sandbox_create(
             policy,
             providers: configured_providers,
             template,
+            features: provider_profile_policy.then_some(SandboxFeatures {
+                provider_profile_policy,
+            }),
             ..SandboxSpec::default()
         }),
         name: name.unwrap_or_default().to_string(),
@@ -3385,8 +3391,6 @@ async fn auto_create_provider(
                 r#type: provider_type.to_string(),
                 credentials: discovered.credentials.clone(),
                 config: discovered.config.clone(),
-                profile_id: provider_type.to_string(),
-                profile_policy_enabled: true,
             }),
         };
 
@@ -3427,8 +3431,6 @@ async fn auto_create_provider(
                     r#type: provider_type.to_string(),
                     credentials: discovered.credentials.clone(),
                     config: discovered.config.clone(),
-                    profile_id: provider_type.to_string(),
-                    profile_policy_enabled: true,
                 }),
             };
 
@@ -3587,8 +3589,6 @@ pub async fn provider_create(
                 r#type: provider_type.clone(),
                 credentials: credential_map,
                 config: config_map,
-                profile_id: provider_type,
-                profile_policy_enabled: true,
             }),
         })
         .await
@@ -3829,8 +3829,6 @@ pub async fn provider_update(
                 r#type: String::new(),
                 credentials: credential_map,
                 config: config_map,
-                profile_id: String::new(),
-                profile_policy_enabled: false,
             }),
         })
         .await

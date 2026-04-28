@@ -1206,6 +1206,10 @@ enum SandboxCommands {
         #[arg(long, overrides_with = "auto_providers")]
         no_auto_providers: bool,
 
+        /// Opt into provider profile network policy composition for this sandbox.
+        #[arg(long)]
+        provider_profile_policy: bool,
+
         /// Attach labels to the sandbox (key=value format, repeatable).
         #[arg(long = "label")]
         labels: Vec<String>,
@@ -2328,6 +2332,7 @@ async fn main() -> Result<()> {
                     no_bootstrap,
                     auto_providers,
                     no_auto_providers,
+                    provider_profile_policy,
                     labels,
                     command,
                 } => {
@@ -2423,6 +2428,7 @@ async fn main() -> Result<()> {
                                 tty_override,
                                 Some(false),
                                 auto_providers_override,
+                                provider_profile_policy,
                                 &labels_map,
                                 &tls,
                             ))
@@ -2447,6 +2453,7 @@ async fn main() -> Result<()> {
                                 tty_override,
                                 bootstrap_override,
                                 auto_providers_override,
+                                provider_profile_policy,
                             ))
                             .await?;
                         }
