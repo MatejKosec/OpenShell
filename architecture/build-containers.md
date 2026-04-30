@@ -63,7 +63,7 @@ handshake secret. Non-Docker drivers such as VM, Podman, and Kubernetes require
 `OPENSHELL_SSH_HANDSHAKE_SECRET` when enabled.
 
 The package installs a system-wide default gateway registration under
-`/etc/openshell`: `default` points to `http://127.0.0.1:8080` and is used by the
+`/etc/openshell`: `default` points to `http://127.0.0.1:17670` and is used by the
 CLI when a user has no per-user active gateway configured.
 
 ## Python Wheels

@@ -697,12 +697,12 @@ mod tests {
     fn system_gateway_metadata_is_fallback_when_user_missing() {
         let user = tempfile::tempdir().unwrap();
         let system = tempfile::tempdir().unwrap();
-        write_system_gateway(system.path(), "default", "http://127.0.0.1:8080");
+        write_system_gateway(system.path(), "default", "http://127.0.0.1:17670");
         std::fs::write(system.path().join("active_gateway"), "default\n").unwrap();
 
         with_tmp_config(user.path(), system.path(), || {
             let metadata = load_gateway_metadata("default").unwrap();
-            assert_eq!(metadata.gateway_endpoint, "http://127.0.0.1:8080");
+            assert_eq!(metadata.gateway_endpoint, "http://127.0.0.1:17670");
             assert_eq!(metadata.auth_mode.as_deref(), Some("plaintext"));
             assert_eq!(load_active_gateway().as_deref(), Some("default"));
         });
@@ -712,7 +712,7 @@ mod tests {
     fn user_gateway_metadata_overrides_system_default() {
         let user = tempfile::tempdir().unwrap();
         let system = tempfile::tempdir().unwrap();
-        write_system_gateway(system.path(), "default", "http://127.0.0.1:8080");
+        write_system_gateway(system.path(), "default", "http://127.0.0.1:17670");
 
         with_tmp_config(user.path(), system.path(), || {
             store_gateway_metadata(
@@ -740,7 +740,7 @@ mod tests {
     fn list_gateways_merges_system_and_user_gateways() {
         let user = tempfile::tempdir().unwrap();
         let system = tempfile::tempdir().unwrap();
-        write_system_gateway(system.path(), "default", "http://127.0.0.1:8080");
+        write_system_gateway(system.path(), "default", "http://127.0.0.1:17670");
 
         with_tmp_config(user.path(), system.path(), || {
             store_gateway_metadata(

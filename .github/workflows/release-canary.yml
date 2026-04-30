@@ -153,10 +153,12 @@ jobs:
           dpkg -L openshell | grep -F /etc/openshell/active_gateway
           dpkg -L openshell | grep -F /etc/openshell/gateways/default/metadata.json
           grep -q '^OPENSHELL_BIND_ADDRESS=127\.0\.0\.1$' /etc/default/openshell-gateway
+          grep -q '^OPENSHELL_SERVER_PORT=17670$' /etc/default/openshell-gateway
           grep -q '^OPENSHELL_DISABLE_TLS=true$' /etc/default/openshell-gateway
           grep -q '^OPENSHELL_DRIVERS=docker$' /etc/default/openshell-gateway
           grep -q '^default$' /etc/openshell/active_gateway
-          grep -q '"gateway_endpoint": "http://127\.0\.0\.1:8080"' /etc/openshell/gateways/default/metadata.json
+          grep -q '"gateway_endpoint": "http://127\.0\.0\.1:17670"' /etc/openshell/gateways/default/metadata.json
+          grep -q '"gateway_port": 17670' /etc/openshell/gateways/default/metadata.json
 
           TAG="${{ steps.release.outputs.tag }}"
           openshell gateway info --name default

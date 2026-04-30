@@ -107,7 +107,7 @@ cat > "$pkgroot/etc/default/openshell-gateway" <<'EOF'
 # when the host has an explicit access-control boundary such as firewall rules
 # or a reverse proxy.
 OPENSHELL_BIND_ADDRESS=127.0.0.1
-OPENSHELL_SERVER_PORT=8080
+OPENSHELL_SERVER_PORT=17670
 
 # Local gateway state.
 OPENSHELL_DB_URL=sqlite:/var/lib/openshell/gateway/openshell.db
@@ -126,8 +126,8 @@ OPENSHELL_DRIVERS=docker
 # OPENSHELL_SSH_HANDSHAKE_SECRET=
 
 # Set when sandbox workers must call back to this gateway through a specific
-# address, for example http://127.0.0.1:8080 in local plaintext deployments.
-# OPENSHELL_GRPC_ENDPOINT=http://127.0.0.1:8080
+# address, for example http://127.0.0.1:17670 in local plaintext deployments.
+# OPENSHELL_GRPC_ENDPOINT=http://127.0.0.1:17670
 
 # TLS settings used when OPENSHELL_DISABLE_TLS=false.
 # OPENSHELL_TLS_CERT=/etc/openshell/gateway/tls.crt
@@ -145,9 +145,9 @@ chmod 0644 "$pkgroot/etc/openshell/active_gateway"
 cat > "$pkgroot/etc/openshell/gateways/default/metadata.json" <<'EOF'
 {
   "name": "default",
-  "gateway_endpoint": "http://127.0.0.1:8080",
+  "gateway_endpoint": "http://127.0.0.1:17670",
   "is_remote": false,
-  "gateway_port": 8080,
+  "gateway_port": 17670,
   "auth_mode": "plaintext"
 }
 EOF
