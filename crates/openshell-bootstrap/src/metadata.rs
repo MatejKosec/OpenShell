@@ -677,10 +677,17 @@ mod tests {
             name: name.to_string(),
             gateway_endpoint: endpoint.to_string(),
             is_remote: false,
-            gateway_port: 8080,
+            gateway_port: 17670,
             remote_host: None,
             resolved_host: None,
-            auth_mode: Some("plaintext".to_string()),
+            auth_mode: Some(
+                if endpoint.starts_with("http://") {
+                    "plaintext"
+                } else {
+                    "mtls"
+                }
+                .to_string(),
+            ),
             edge_team_domain: None,
             edge_auth_url: None,
         };
@@ -697,13 +704,14 @@ mod tests {
     fn system_gateway_metadata_is_fallback_when_user_missing() {
         let user = tempfile::tempdir().unwrap();
         let system = tempfile::tempdir().unwrap();
-        write_system_gateway(system.path(), "default", "http://127.0.0.1:17670");
+        write_system_gateway(system.path(), "default", "https://127.0.0.1:17670");
         std::fs::write(system.path().join("active_gateway"), "default\n").unwrap();
 
         with_tmp_config(user.path(), system.path(), || {
             let metadata = load_gateway_metadata("default").unwrap();
-            assert_eq!(metadata.gateway_endpoint, "http://127.0.0.1:17670");
-            assert_eq!(metadata.auth_mode.as_deref(), Some("plaintext"));
+            assert_eq!(metadata.gateway_endpoint, "https://127.0.0.1:17670");
+            assert_eq!(metadata.gateway_port, 17670);
+            assert_eq!(metadata.auth_mode.as_deref(), Some("mtls"));
             assert_eq!(load_active_gateway().as_deref(), Some("default"));
         });
     }
@@ -712,7 +720,7 @@ mod tests {
     fn user_gateway_metadata_overrides_system_default() {
         let user = tempfile::tempdir().unwrap();
         let system = tempfile::tempdir().unwrap();
-        write_system_gateway(system.path(), "default", "http://127.0.0.1:17670");
+        write_system_gateway(system.path(), "default", "https://127.0.0.1:17670");
 
         with_tmp_config(user.path(), system.path(), || {
             store_gateway_metadata(
@@ -740,7 +748,7 @@ mod tests {
     fn list_gateways_merges_system_and_user_gateways() {
         let user = tempfile::tempdir().unwrap();
         let system = tempfile::tempdir().unwrap();
-        write_system_gateway(system.path(), "default", "http://127.0.0.1:17670");
+        write_system_gateway(system.path(), "default", "https://127.0.0.1:17670");
 
         with_tmp_config(user.path(), system.path(), || {
             store_gateway_metadata(

@@ -55,16 +55,18 @@ hosts. It resolves the current package filename from the dev release checksum
 file, verifies the package checksum, then installs it with `apt`/`dpkg`.
 
 The systemd unit is installed but not enabled or started automatically. Its
-defaults live in `/etc/default/openshell-gateway`: TLS is disabled for simple
-local startup, the gateway binds `127.0.0.1`, and the VM driver helper is found
-through `OPENSHELL_DRIVER_DIR=/usr/libexec/openshell`. The packaged service
-defaults to the Docker compute driver so it can start locally without an SSH
-handshake secret. Non-Docker drivers such as VM, Podman, and Kubernetes require
-`OPENSHELL_SSH_HANDSHAKE_SECRET` when enabled.
+defaults live in `/etc/default/openshell-gateway`: mTLS is enabled with
+installer-generated certificates, the gateway binds `127.0.0.1`, and the VM
+driver helper is found through `OPENSHELL_DRIVER_DIR=/usr/libexec/openshell`.
+The packaged service defaults to the Docker compute driver so it can start
+locally without an SSH handshake secret. Non-Docker drivers such as VM, Podman,
+and Kubernetes require `OPENSHELL_SSH_HANDSHAKE_SECRET` when enabled.
 
 The package installs a system-wide default gateway registration under
-`/etc/openshell`: `default` points to `http://127.0.0.1:17670` and is used by the
-CLI when a user has no per-user active gateway configured.
+`/etc/openshell`: `default` points to `https://127.0.0.1:17670` and is used by
+the CLI when a user has no per-user active gateway configured. The matching
+client mTLS bundle is generated under
+`/etc/openshell/gateways/default/mtls/`.
 
 ## Python Wheels
 

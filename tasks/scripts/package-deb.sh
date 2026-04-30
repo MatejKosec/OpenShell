@@ -103,7 +103,7 @@ cat > "$pkgroot/etc/default/openshell-gateway" <<'EOF'
 # The packaged service is disabled by default. Review these settings before
 # running: sudo systemctl enable --now openshell-gateway
 
-# Bind to loopback for packaged plaintext service startup. Change this only
+# Bind to loopback for packaged mTLS service startup. Change this only
 # when the host has an explicit access-control boundary such as firewall rules
 # or a reverse proxy.
 OPENSHELL_BIND_ADDRESS=127.0.0.1
@@ -113,26 +113,26 @@ OPENSHELL_SERVER_PORT=17670
 OPENSHELL_DB_URL=sqlite:/var/lib/openshell/gateway/openshell.db
 OPENSHELL_DRIVER_DIR=/usr/libexec/openshell
 
-# The packaged service starts without TLS. To enable TLS, set this to false and
-# provide OPENSHELL_TLS_CERT, OPENSHELL_TLS_KEY, and OPENSHELL_TLS_CLIENT_CA.
-OPENSHELL_DISABLE_TLS=true
+# The packaged service starts with mTLS. These files are generated in postinst
+# if they do not already exist.
+OPENSHELL_TLS_CERT=/etc/openshell/gateway/tls.crt
+OPENSHELL_TLS_KEY=/etc/openshell/gateway/tls.key
+OPENSHELL_TLS_CLIENT_CA=/etc/openshell/gateway/client-ca.crt
 
 # Configure the compute driver for this host. The packaged service defaults to
-# docker so it can start locally without TLS or an SSH handshake secret.
+# docker so it can start locally without an SSH handshake secret.
 # Examples: docker, kubernetes, podman, vm.
 OPENSHELL_DRIVERS=docker
+OPENSHELL_DOCKER_TLS_CA=/etc/openshell/gateways/default/mtls/ca.crt
+OPENSHELL_DOCKER_TLS_CERT=/etc/openshell/gateways/default/mtls/tls.crt
+OPENSHELL_DOCKER_TLS_KEY=/etc/openshell/gateways/default/mtls/tls.key
 
 # Non-docker drivers require a shared SSH handshake secret.
 # OPENSHELL_SSH_HANDSHAKE_SECRET=
 
 # Set when sandbox workers must call back to this gateway through a specific
-# address, for example http://127.0.0.1:17670 in local plaintext deployments.
-# OPENSHELL_GRPC_ENDPOINT=http://127.0.0.1:17670
-
-# TLS settings used when OPENSHELL_DISABLE_TLS=false.
-# OPENSHELL_TLS_CERT=/etc/openshell/gateway/tls.crt
-# OPENSHELL_TLS_KEY=/etc/openshell/gateway/tls.key
-# OPENSHELL_TLS_CLIENT_CA=/etc/openshell/gateway/client-ca.crt
+# address. Loopback is rewritten by the docker driver for sandbox containers.
+OPENSHELL_GRPC_ENDPOINT=https://127.0.0.1:17670
 EOF
 chmod 0644 "$pkgroot/etc/default/openshell-gateway"
 
@@ -145,10 +145,10 @@ chmod 0644 "$pkgroot/etc/openshell/active_gateway"
 cat > "$pkgroot/etc/openshell/gateways/default/metadata.json" <<'EOF'
 {
   "name": "default",
-  "gateway_endpoint": "http://127.0.0.1:17670",
+  "gateway_endpoint": "https://127.0.0.1:17670",
   "is_remote": false,
   "gateway_port": 17670,
-  "auth_mode": "plaintext"
+  "auth_mode": "mtls"
 }
 EOF
 chmod 0644 "$pkgroot/etc/openshell/gateways/default/metadata.json"
@@ -160,6 +160,7 @@ Architecture: ${OPENSHELL_DEB_ARCH}
 Maintainer: ${MAINTAINER}
 Section: utils
 Priority: optional
+Depends: openssl
 Homepage: ${HOMEPAGE}
 Description: OpenShell CLI for safe, sandboxed AI agent runtimes
  OpenShell provides host-side command-line and gateway components for
@@ -195,6 +196,76 @@ fi
 mkdir -p /var/lib/openshell/gateway
 chown openshell:openshell /var/lib/openshell /var/lib/openshell/gateway
 chmod 0750 /var/lib/openshell /var/lib/openshell/gateway
+
+gateway_tls_dir=/etc/openshell/gateway
+client_mtls_dir=/etc/openshell/gateways/default/mtls
+
+mkdir -p "$gateway_tls_dir" "$client_mtls_dir"
+chown openshell:openshell "$gateway_tls_dir"
+chmod 0750 "$gateway_tls_dir"
+chown root:root /etc/openshell /etc/openshell/gateways /etc/openshell/gateways/default "$client_mtls_dir"
+chmod 0755 /etc/openshell /etc/openshell/gateways /etc/openshell/gateways/default "$client_mtls_dir"
+
+if [ ! -s "$gateway_tls_dir/tls.crt" ] ||
+   [ ! -s "$gateway_tls_dir/tls.key" ] ||
+   [ ! -s "$gateway_tls_dir/client-ca.crt" ] ||
+   [ ! -s "$client_mtls_dir/ca.crt" ] ||
+   [ ! -s "$client_mtls_dir/tls.crt" ] ||
+   [ ! -s "$client_mtls_dir/tls.key" ]; then
+  tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+  openssl genrsa -out "$tmpdir/ca.key" 4096 >/dev/null 2>&1
+  openssl req -x509 -new -nodes -key "$tmpdir/ca.key" -sha256 -days 3650 \
+    -subj "/O=openshell/CN=openshell-ca" \
+    -out "$tmpdir/ca.crt" >/dev/null 2>&1
+
+  openssl genrsa -out "$tmpdir/server.key" 4096 >/dev/null 2>&1
+  openssl req -new -key "$tmpdir/server.key" \
+    -subj "/O=openshell/CN=openshell-server" \
+    -out "$tmpdir/server.csr" >/dev/null 2>&1
+  cat > "$tmpdir/server.ext" <<'EXT'
+basicConstraints=CA:FALSE
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=serverAuth
+subjectAltName=DNS:localhost,DNS:openshell,DNS:host.openshell.internal,IP:127.0.0.1
+EXT
+  openssl x509 -req -in "$tmpdir/server.csr" \
+    -CA "$tmpdir/ca.crt" -CAkey "$tmpdir/ca.key" -CAcreateserial \
+    -out "$tmpdir/server.crt" -days 3650 -sha256 \
+    -extfile "$tmpdir/server.ext" >/dev/null 2>&1
+
+  openssl genrsa -out "$tmpdir/client.key" 4096 >/dev/null 2>&1
+  openssl req -new -key "$tmpdir/client.key" \
+    -subj "/O=openshell/CN=openshell-client" \
+    -out "$tmpdir/client.csr" >/dev/null 2>&1
+  cat > "$tmpdir/client.ext" <<'EXT'
+basicConstraints=CA:FALSE
+keyUsage=digitalSignature,keyEncipherment
+extendedKeyUsage=clientAuth
+EXT
+  openssl x509 -req -in "$tmpdir/client.csr" \
+    -CA "$tmpdir/ca.crt" -CAkey "$tmpdir/ca.key" -CAcreateserial \
+    -out "$tmpdir/client.crt" -days 3650 -sha256 \
+    -extfile "$tmpdir/client.ext" >/dev/null 2>&1
+
+  install -o openshell -g openshell -m 0644 "$tmpdir/server.crt" "$gateway_tls_dir/tls.crt"
+  install -o openshell -g openshell -m 0600 "$tmpdir/server.key" "$gateway_tls_dir/tls.key"
+  install -o openshell -g openshell -m 0644 "$tmpdir/ca.crt" "$gateway_tls_dir/client-ca.crt"
+
+  install -o root -g root -m 0644 "$tmpdir/ca.crt" "$client_mtls_dir/ca.crt"
+  install -o root -g root -m 0644 "$tmpdir/client.crt" "$client_mtls_dir/tls.crt"
+  install -o root -g root -m 0644 "$tmpdir/client.key" "$client_mtls_dir/tls.key"
+
+  rm -rf "$tmpdir"
+  trap - EXIT HUP INT TERM
+else
+  chown openshell:openshell "$gateway_tls_dir/tls.crt" "$gateway_tls_dir/tls.key" "$gateway_tls_dir/client-ca.crt"
+  chmod 0644 "$gateway_tls_dir/tls.crt" "$gateway_tls_dir/client-ca.crt"
+  chmod 0600 "$gateway_tls_dir/tls.key"
+  chown root:root "$client_mtls_dir/ca.crt" "$client_mtls_dir/tls.crt" "$client_mtls_dir/tls.key"
+  chmod 0644 "$client_mtls_dir/ca.crt" "$client_mtls_dir/tls.crt" "$client_mtls_dir/tls.key"
+fi
 
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   systemctl daemon-reload || true

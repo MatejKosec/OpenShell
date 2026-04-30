@@ -105,8 +105,24 @@ pub struct TlsMaterials {
 /// Resolve the TLS cert directory for a known gateway name.
 fn tls_dir_for_gateway(name: &str) -> Option<PathBuf> {
     let safe_name = sanitize_name(name);
-    let base = xdg_config_dir().ok()?.join("openshell").join("gateways");
-    Some(base.join(safe_name).join("mtls"))
+    let user_dir = xdg_config_dir()
+        .ok()?
+        .join("openshell")
+        .join("gateways")
+        .join(&safe_name)
+        .join("mtls");
+    if user_dir.is_dir() {
+        return Some(user_dir);
+    }
+
+    let system_dir = openshell_bootstrap::paths::system_gateways_dir()
+        .join(&safe_name)
+        .join("mtls");
+    if system_dir.is_dir() {
+        return Some(system_dir);
+    }
+
+    Some(user_dir)
 }
 
 /// Fallback TLS directory resolution from a server URL.
@@ -131,9 +147,7 @@ fn default_tls_dir(server: &str) -> Option<PathBuf> {
     }
 
     let name = name.unwrap_or_else(|| "openshell".to_string());
-    let safe_name = sanitize_name(&name);
-    let base = xdg_config_dir().ok()?.join("openshell").join("gateways");
-    Some(base.join(safe_name).join("mtls"))
+    tls_dir_for_gateway(&name)
 }
 
 fn sanitize_name(value: &str) -> String {
@@ -364,4 +378,69 @@ pub async fn grpc_inference_client(server: &str, tls: &TlsOptions) -> Result<Grp
     let channel = build_channel(server, tls).await?;
     let interceptor = EdgeAuthInterceptor::maybe_from(tls)?;
     Ok(InferenceClient::with_interceptor(channel, interceptor))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::TEST_ENV_LOCK;
+    use temp_env::with_vars;
+
+    fn write_mtls_bundle(dir: &std::path::Path) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join("ca.crt"), "ca").unwrap();
+        std::fs::write(dir.join("tls.crt"), "cert").unwrap();
+        std::fs::write(dir.join("tls.key"), "key").unwrap();
+    }
+
+    #[test]
+    fn gateway_tls_paths_fall_back_to_system_mtls_bundle() {
+        let _guard = TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let user = tempfile::tempdir().unwrap();
+        let system = tempfile::tempdir().unwrap();
+        write_mtls_bundle(&system.path().join("gateways/default/mtls"));
+
+        let user = user.path().to_string_lossy().into_owned();
+        let system = system.path().to_string_lossy().into_owned();
+        with_vars(
+            [
+                ("XDG_CONFIG_HOME", Some(user.as_str())),
+                ("OPENSHELL_SYSTEM_CONFIG_DIR", Some(system.as_str())),
+            ],
+            || {
+                let tls = TlsOptions::default().with_gateway_name("default");
+                require_tls_materials("https://127.0.0.1:17670", &tls).unwrap();
+            },
+        );
+    }
+
+    #[test]
+    fn gateway_tls_paths_prefer_user_mtls_bundle() {
+        let _guard = TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let user = tempfile::tempdir().unwrap();
+        let system = tempfile::tempdir().unwrap();
+        write_mtls_bundle(&system.path().join("gateways/default/mtls"));
+        std::fs::create_dir_all(user.path().join("openshell/gateways/default/mtls")).unwrap();
+
+        let user = user.path().to_string_lossy().into_owned();
+        let system = system.path().to_string_lossy().into_owned();
+        with_vars(
+            [
+                ("XDG_CONFIG_HOME", Some(user.as_str())),
+                ("OPENSHELL_SYSTEM_CONFIG_DIR", Some(system.as_str())),
+            ],
+            || {
+                let tls = TlsOptions::default().with_gateway_name("default");
+                let result = require_tls_materials("https://127.0.0.1:17670", &tls);
+                match result {
+                    Ok(_) => panic!("expected user mTLS directory to take precedence"),
+                    Err(err) => assert!(err.to_string().contains("failed to read TLS CA")),
+                }
+            },
+        );
+    }
 }

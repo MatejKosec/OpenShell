@@ -154,11 +154,25 @@ jobs:
           dpkg -L openshell | grep -F /etc/openshell/gateways/default/metadata.json
           grep -q '^OPENSHELL_BIND_ADDRESS=127\.0\.0\.1$' /etc/default/openshell-gateway
           grep -q '^OPENSHELL_SERVER_PORT=17670$' /etc/default/openshell-gateway
-          grep -q '^OPENSHELL_DISABLE_TLS=true$' /etc/default/openshell-gateway
+          ! grep -q '^OPENSHELL_DISABLE_TLS=true$' /etc/default/openshell-gateway
+          grep -q '^OPENSHELL_TLS_CERT=/etc/openshell/gateway/tls\.crt$' /etc/default/openshell-gateway
+          grep -q '^OPENSHELL_TLS_KEY=/etc/openshell/gateway/tls\.key$' /etc/default/openshell-gateway
+          grep -q '^OPENSHELL_TLS_CLIENT_CA=/etc/openshell/gateway/client-ca\.crt$' /etc/default/openshell-gateway
           grep -q '^OPENSHELL_DRIVERS=docker$' /etc/default/openshell-gateway
+          grep -q '^OPENSHELL_DOCKER_TLS_CA=/etc/openshell/gateways/default/mtls/ca\.crt$' /etc/default/openshell-gateway
+          grep -q '^OPENSHELL_DOCKER_TLS_CERT=/etc/openshell/gateways/default/mtls/tls\.crt$' /etc/default/openshell-gateway
+          grep -q '^OPENSHELL_DOCKER_TLS_KEY=/etc/openshell/gateways/default/mtls/tls\.key$' /etc/default/openshell-gateway
+          grep -q '^OPENSHELL_GRPC_ENDPOINT=https://127\.0\.0\.1:17670$' /etc/default/openshell-gateway
           grep -q '^default$' /etc/openshell/active_gateway
-          grep -q '"gateway_endpoint": "http://127\.0\.0\.1:17670"' /etc/openshell/gateways/default/metadata.json
+          grep -q '"gateway_endpoint": "https://127\.0\.0\.1:17670"' /etc/openshell/gateways/default/metadata.json
           grep -q '"gateway_port": 17670' /etc/openshell/gateways/default/metadata.json
+          grep -q '"auth_mode": "mtls"' /etc/openshell/gateways/default/metadata.json
+          test -s /etc/openshell/gateway/tls.crt
+          test -s /etc/openshell/gateway/tls.key
+          test -s /etc/openshell/gateway/client-ca.crt
+          test -s /etc/openshell/gateways/default/mtls/ca.crt
+          test -s /etc/openshell/gateways/default/mtls/tls.crt
+          test -s /etc/openshell/gateways/default/mtls/tls.key
 
           TAG="${{ steps.release.outputs.tag }}"
           openshell gateway info --name default
